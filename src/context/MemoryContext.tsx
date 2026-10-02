@@ -1,16 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { initialMemories, locations, users } from "../data/mockData";
-import type { Memory, Visibility } from "../types/memory";
+import type { Location, Memory, Visibility } from "../types/memory";
+import { useAuth } from "./AuthContext";
+import { supabase } from "../lib/supabase";
 
 interface NewMemoryInput {
   title: string;
   content: string;
   eventTime: string;
   locationId: string;
+  location?: Location;
   photos: string[];
   mood: string;
   visibility: Visibility;
   tags: string[];
+  people: string[];
 }
 
 interface MemoryContextValue {
@@ -22,21 +26,58 @@ const MemoryContext = createContext<MemoryContextValue | null>(null);
 
 export function MemoryProvider({ children }: { children: ReactNode }) {
   const [memories, setMemories] = useState(initialMemories);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!supabase || !user) return;
+    let active = true;
+    void supabase.from("memories").select("*, memory_people(display_name)").order("event_time", { ascending: false }).then(({ data, error }) => {
+      if (!active || error || !data) return;
+      const mapped: Memory[] = data.map((row) => ({
+        id: String(row.id),
+        title: String(row.title),
+        content: String(row.content ?? ""),
+        eventTime: String(row.event_time),
+        createdAt: String(row.created_at),
+        location: { id: `db-${row.id}`, name: String(row.location_name), city: String(row.location_city ?? ""), country: String(row.location_country ?? ""), latitude: Number(row.latitude), longitude: Number(row.longitude) },
+        photos: ["./memories/south-bank-dinner.png"],
+        mood: String(row.mood ?? "😊"),
+        moodLabel: String(row.mood_label ?? "A memory"),
+        visibility: row.visibility === "Friends" ? "Friends" : "Only Me",
+        tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+        people: Array.isArray(row.memory_people) ? row.memory_people.map((person: { display_name?: string }) => person.display_name).filter(Boolean) as string[] : [],
+        user: { id: user.id, name: user.name, initials: user.name.slice(0, 2).toUpperCase(), color: "#BCEFD8" },
+      }));
+      setMemories(mapped);
+    });
+    return () => { active = false; };
+  }, [user]);
 
   const addMemory = useCallback((input: NewMemoryInput) => {
-    const location = locations.find((item) => item.id === input.locationId) ?? locations[0];
+    const location = input.location ?? locations.find((item) => item.id === input.locationId) ?? locations[0];
     const memory: Memory = {
       ...input,
-      id: `memory-${Date.now()}`,
+      id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       location,
       photos: input.photos.length ? input.photos : ["./memories/south-bank-dinner.png"],
       moodLabel: "A new memory",
-      user: users[0],
+      user: user ? { id: user.id, name: user.name, initials: user.name.slice(0, 2).toUpperCase(), color: "#BCEFD8" } : users[0],
     };
     setMemories((current) => [memory, ...current]);
+    if (supabase && user) {
+      void supabase.from("memories").insert({
+        id: memory.id, owner_id: user.id, title: memory.title, content: memory.content,
+        event_time: memory.eventTime, location_name: memory.location.name, location_city: memory.location.city,
+        location_country: memory.location.country, latitude: memory.location.latitude, longitude: memory.location.longitude,
+        mood: memory.mood, mood_label: memory.moodLabel, visibility: memory.visibility, tags: memory.tags,
+      }).then(async ({ error }) => {
+        if (error || !memory.people.length) return;
+        await supabase!.from("memory_people").insert(memory.people.map((displayName) => ({ memory_id: memory.id, display_name: displayName })));
+      });
+    }
     return memory;
-  }, []);
+  }, [user]);
 
   const value = useMemo<MemoryContextValue>(() => ({
     memories,
@@ -98,6 +139,7 @@ export function MemoryProvider({ children }: { children: ReactNode }) {
           mood: typeof data.mood === "string" ? data.mood : "😊",
           visibility: data.visibility === "Friends" ? "Friends" : "Only Me",
           tags: [],
+          people: [],
         });
         return { id: memory.id, title: memory.title, status: "created" };
       },

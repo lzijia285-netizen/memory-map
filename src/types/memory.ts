@@ -28,6 +28,7 @@ export interface Memory {
   moodLabel: string;
   visibility: Visibility;
   tags: string[];
+  people: string[];
   user: User;
   likes?: number;
 }

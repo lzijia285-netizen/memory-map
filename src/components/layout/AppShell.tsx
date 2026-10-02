@@ -1,6 +1,7 @@
 import { CalendarDays, CircleUserRound, Clock3, Heart, House, Map, Plus, UsersRound } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { BottomNav } from "../navigation/BottomNav";
+import { useAuth } from "../../context/AuthContext";
 
 const navigation = [
   { to: "/home", label: "Home", icon: House },
@@ -21,6 +22,8 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
 }
 
 function DesktopSidebar() {
+  const { user } = useAuth();
+  const initials = (user?.name || "Friend").slice(0, 2).toUpperCase();
   return (
     <aside className="desktop-sidebar">
       <BrandMark />
@@ -34,17 +37,18 @@ function DesktopSidebar() {
       </nav>
       <NavLink className="desktop-add" to="/new"><Plus size={20} /> Add memory</NavLink>
       <div className="sidebar-profile">
-        <div className="avatar avatar--small">AL</div>
-        <div><strong>Alex</strong><span>Private space</span></div>
+        <div className="avatar avatar--small">{initials}</div>
+        <div><strong>{user?.name || "Friend"}</strong><span>Private space</span></div>
       </div>
     </aside>
   );
 }
 
 function ContextPanel() {
+  const now = new Date();
   return (
     <aside className="context-panel">
-      <div className="context-panel__top"><span>Sunday</span><strong>27</strong><span>September</span></div>
+      <div className="context-panel__top"><span>{now.toLocaleDateString("en-AU", { weekday: "long" })}</span><strong>{now.getDate()}</strong><span>{now.toLocaleDateString("en-AU", { month: "long" })}</span></div>
       <div className="context-block">
         <div className="eyebrow">ON THIS DAY</div>
         <img src="./memories/seoul-cafe.png" alt="Coffee by a rainy window" />

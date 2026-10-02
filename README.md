@@ -1,8 +1,8 @@
 # Memory Map
 
-Memory Map is a mobile-first private diary prototype for a small circle of friends. A memory combines a time, place, photo, mood, and story, then becomes browsable through a home feed, timeline, calendar, and visual map.
+Memory Map is a mobile-first private diary for a small circle of friends. A memory combines time, place, photos, people, mood, and a story, then becomes browsable through Home, Timeline, Calendar, and Map.
 
-This first stage is intentionally front-end only. Authentication, persistence, uploads, and real map tiles are represented by polished local interactions and mock data so the product can be evaluated before back-end work begins.
+Version 2 adds email/password and invitation-code account flows, protected routes, people attached to memories, a real MapLibre/OpenFreeMap map, current-location support, map pinning, and submit-based place search. It runs in Preview Mode without credentials and switches to Supabase authentication when environment variables are configured.
 
 ## Run locally
 
@@ -13,76 +13,40 @@ pnpm install
 pnpm dev
 ```
 
-Open the local URL printed by Vite. The default route opens the signed-in prototype; the login screen is available at `#/login`.
+The default route opens the invitation-only sign-in screen. In Preview Mode, use any valid email and a password of at least eight characters. Production registration also requires a one-time invitation code.
 
-Create a production build with:
+Create the production build with `pnpm build`. The static output is written to `dist/`; the relative Vite base and `HashRouter` remain compatible with static hosting.
 
-```bash
-pnpm build
-```
+## Pages
 
-The static site is written to `dist/`. The Vite base is relative and the app uses `HashRouter`, so the same build is compatible with static hosts such as GitHub Pages.
+- `#/login` — email/password sign-in and one-time invitation registration.
+- `#/home` — live greeting, daily prompt, recent memories, and monthly totals.
+- `#/new` — photos, story, mood, people, time, location, tags, and visibility.
+- `#/location` — OpenStreetMap search, current location, map pinning, and confirmation.
+- `#/map` — real vector map, memory pins, filters, and location bottom sheet.
+- `#/timeline` and `#/calendar` — two time-based views of the same memories.
+- `#/friends` — group-shared memories with View and Like interactions.
+- `#/profile` — account mode, totals, privacy, settings, and logout.
+- `#/memory/:id` — immersive memory detail including people and privacy.
 
-## Prototype pages
+Preview content in `src/data/mockData.ts` includes eight memories, three users, five places, several months, people, and the complete `Memory` shape.
 
-- `#/login` — email invitation entry; Continue opens the prototype.
-- `#/home` — daily prompt, recent memories, and monthly snapshot.
-- `#/new` — photo, story, mood, time, place, tags, and visibility editor.
-- `#/location` — searchable mock location picker with a reusable map surface.
-- `#/map` — memory pins and a touch-friendly location bottom sheet.
-- `#/timeline` — memories grouped into an editorial life timeline.
-- `#/calendar` — monthly view with memory days and a selected-day drawer.
-- `#/friends` — shared memories with View and Like interactions only.
-- `#/profile` — personal totals, annual review, privacy, and settings states.
-- `#/memory/:id` — immersive detail view for any mock memory.
+## Enable Supabase cloud mode
 
-Mock content lives in `src/data/mockData.ts`. It includes eight memories, three users, five places, several months, and the complete `Memory` data shape.
+1. Create a free Supabase project and run `supabase/migrations/001_memory_map.sql` in its SQL editor.
+2. Deploy `supabase/functions/register-by-invite/index.ts` as the `register-by-invite` Edge Function.
+3. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+4. Generate a one-time code in the Supabase SQL editor with `select public.issue_invite('Friend name');`, then send the returned code privately.
+5. Rebuild. The login page will show “Secure cloud mode” and use Supabase Auth.
 
-## Project structure
+The migration includes profiles, memories, people, photos, likes, a private Storage bucket, and Row Level Security. `Only Me` entries are readable only by their owner; `Friends` entries are readable by signed-in members. Never put the Supabase service-role key in this repository or in a `VITE_` variable.
 
-```text
-src/
-  components/
-    layout/
-    map/
-    memory/
-    navigation/
-  context/
-  data/
-  pages/
-  types/
-  App.tsx
-  main.tsx
-  styles.css
-public/
-  memories/
-  favicon.svg
-```
+## Map services
 
-The `MemoryProvider` owns the current in-browser memory list and the create action. All views consume that same state, which keeps the prototype behavior close to the eventual data flow without introducing a server.
+The interactive map uses MapLibre GL JS with the free OpenFreeMap public style. Place search uses OpenStreetMap Nominatim only after an explicit form submission; there is no autocomplete. Keep usage light, preserve attribution, cache repeated production searches, and follow the provider's current usage policy.
 
-## Connecting Supabase later
+## Current boundary
 
-1. Create Supabase tables for `profiles`, `memories`, `memory_photos`, `locations`, `tags`, and friend-sharing relationships.
-2. Replace `src/data/mockData.ts` reads with a small data service that maps Supabase rows to the existing `Memory`, `User`, and `Location` types.
-3. Replace the `MemoryProvider.addMemory` implementation with an insert plus optimistic local update. The page components can remain unchanged.
-4. Add Supabase Auth magic-link email login to `Login.tsx`, then protect the app routes while keeping `#/login` public.
-5. Store photo objects in Supabase Storage or Cloudflare R2 and save their public or signed URLs in `memory_photos`.
-6. Add Row Level Security before inviting friends: memories should default to owner-only, and shared memories should be readable only by explicitly allowed friends.
-
-## Connecting MapLibre later
-
-`src/components/map/MemoryMap.tsx` is the isolated mock map boundary. Replace its internal SVG map with a MapLibre map while preserving its public props:
-
-- `selectedId` controls the active location.
-- `onSelect(id)` opens the same bottom sheet or confirms a picker location.
-- `picker` switches to the simplified location-selection presentation.
-
-Convert the existing mock coordinates into GeoJSON features and render clustered points for zoomed-out views. Keep the current buttons and bottom sheet outside the MapLibre canvas so navigation, accessibility, and mobile touch behavior remain stable.
-
-## Notes
-
-- Uploaded images are previewed with temporary browser object URLs and are not persisted.
-- Saving a memory updates React state for the current session only.
-- The map is deliberately a lightweight placeholder; no Google Maps or MapLibre network requests are made.
-- The included lifestyle images were generated specifically for this prototype and are stored locally under `public/memories/`.
+- Preview Mode keeps newly created memories in the current browser session.
+- Uploaded images use temporary browser previews until the data repository is connected to the included Supabase schema and private bucket.
+- Do not share the public login URL with friends until Supabase cloud mode is configured and tested.

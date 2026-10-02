@@ -12,12 +12,13 @@ export function MapPage() {
   const [sheetOpen, setSheetOpen] = useState(true);
   const location = locations.find((item) => item.id === selected) ?? locations[0];
   const related = memories.filter((memory) => memory.location.id === selected).slice(0, 3);
+  const counts = memories.reduce<Record<string, number>>((acc, memory) => { acc[memory.location.id] = (acc[memory.location.id] ?? 0) + 1; return acc; }, {});
   const selectPin = (id: string) => { setSelected(id); setSheetOpen(true); };
 
   return (
     <div className="map-page">
-      <div className="map-page__header"><PageHeader title="My Memory Map" eyebrow="32 MEMORIES · 5 PLACES" /><div className="map-filters"><button>2026 <ChevronDown size={15} /></button><button>All memories <ChevronDown size={15} /></button></div></div>
-      <div className="map-page__canvas"><MemoryMap selectedId={selected} onSelect={selectPin} /></div>
+      <div className="map-page__header"><PageHeader title="My Memory Map" eyebrow={`${memories.length} MEMORIES · ${new Set(memories.map((memory) => memory.location.id)).size} PLACES`} /><div className="map-filters"><button>2026 <ChevronDown size={15} /></button><button>All memories <ChevronDown size={15} /></button></div></div>
+      <div className="map-page__canvas"><MemoryMap selectedId={selected} onSelect={selectPin} counts={counts} /></div>
       {sheetOpen && <aside className="map-sheet">
         <div className="map-sheet__handle" />
         <button className="map-sheet__close" type="button" onClick={() => setSheetOpen(false)} aria-label="Close"><X size={18} /></button>
