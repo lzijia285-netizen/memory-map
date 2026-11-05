@@ -59,6 +59,8 @@ button { cursor: pointer; }
 .memory-card:hover { transform: translateY(-3px); }
 .memory-card__image-wrap { position: relative; overflow: hidden; aspect-ratio: 1 / 1.15; border-radius: 21px; background: var(--mint-100); }
 .memory-card__image { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
+.memory-card__placeholder, .detail-hero__placeholder { display: grid; width: 100%; height: 100%; place-items: center; background: linear-gradient(145deg, #c9f5dd, #79cca7); color: #297d58; }
+.memory-card__placeholder { position: absolute; inset: 0; }
 .memory-card:hover .memory-card__image { transform: scale(1.025); }
 .memory-card__mood { position: absolute; right: 9px; bottom: 9px; display: grid; width: 34px; height: 34px; place-items: center; border: 2px solid rgba(255,255,255,.8); border-radius: 50%; background: rgba(255,255,255,.88); box-shadow: 0 4px 15px rgba(0,0,0,.1); backdrop-filter: blur(10px); }
 .memory-card__body { display: grid; grid-template-columns: minmax(0, 1fr) auto; justify-content: space-between; gap: 8px; padding: 11px 2px 0; }
@@ -316,6 +318,7 @@ button { cursor: pointer; }
 .detail-page { width: min(100%, 760px); margin: 0 auto; padding-bottom: 45px; }
 .detail-hero { position: relative; min-height: 420px; overflow: hidden; }
 .detail-hero > img { width: 100%; height: 100%; min-height: 420px; object-fit: cover; }
+.detail-hero__placeholder { min-height: 420px; }
 .detail-hero__shade { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(10,26,20,.1) 38%, rgba(10,26,20,.8)); }
 .detail-control { position: absolute; top: 22px; left: 20px; display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid rgba(255,255,255,.36); border-radius: 14px; background: rgba(255,255,255,.78); backdrop-filter: blur(12px); color: var(--ink); }
 .detail-control--right { right: 20px; left: auto; }

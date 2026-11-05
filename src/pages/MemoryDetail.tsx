@@ -6,12 +6,13 @@ export function MemoryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { memories } = useMemories();
-  const memory = memories.find((item) => item.id === id) ?? memories[0];
+  const memory = memories.find((item) => item.id === id);
+  if (!memory) return <div className="page"><p>This memory is unavailable.</p><Link to="/home">Back to home</Link></div>;
   const date = new Date(memory.eventTime);
   return (
     <div className="detail-page">
       <div className="detail-hero">
-        <img src={memory.photos[0]} alt={memory.title} />
+        {memory.photos[0] ? <img src={memory.photos[0]} alt={memory.title} /> : <div className="detail-hero__placeholder"><MapPin size={72} /></div>}
         <div className="detail-hero__shade" />
         <button className="detail-control" type="button" onClick={() => navigate(-1)} aria-label="Go back"><ArrowLeft size={20} /></button>
         <button className="detail-control detail-control--right" type="button" aria-label="Share"><Share2 size={19} /></button>

@@ -11,6 +11,7 @@ interface NewMemoryInput {
   locationId: string;
   location?: Location;
   photos: string[];
+  photoFiles?: File[];
   mood: string;
   visibility: Visibility;
   tags: string[];
@@ -19,63 +20,95 @@ interface NewMemoryInput {
 
 interface MemoryContextValue {
   memories: Memory[];
-  addMemory: (input: NewMemoryInput) => Memory;
+  addMemory: (input: NewMemoryInput) => Promise<Memory>;
 }
 
 const MemoryContext = createContext<MemoryContextValue | null>(null);
 
 export function MemoryProvider({ children }: { children: ReactNode }) {
-  const [memories, setMemories] = useState(initialMemories);
+  const [memories, setMemories] = useState<Memory[]>(supabase ? [] : initialMemories);
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!supabase || !user) return;
+    if (!supabase) return;
+    if (!user) { setMemories([]); return; }
     let active = true;
-    void supabase.from("memories").select("*, memory_people(display_name)").order("event_time", { ascending: false }).then(({ data, error }) => {
+    setMemories([]);
+    void supabase.from("memories").select("*, memory_people(display_name), memory_photos(storage_path, sort_order), author:profiles!memories_owner_id_fkey(display_name)").order("event_time", { ascending: false }).then(async ({ data, error }) => {
       if (!active || error || !data) return;
-      const mapped: Memory[] = data.map((row) => ({
+      const mapped: Memory[] = await Promise.all(data.map(async (row) => {
+        const paths = Array.isArray(row.memory_photos)
+          ? [...row.memory_photos].sort((a, b) => a.sort_order - b.sort_order).map((photo) => String(photo.storage_path))
+          : [];
+        const { data: signed } = paths.length ? await supabase!.storage.from("memory-photos").createSignedUrls(paths, 86400) : { data: [] };
+        const authorName = String(row.author?.display_name ?? "Friend");
+        return {
         id: String(row.id),
         title: String(row.title),
         content: String(row.content ?? ""),
         eventTime: String(row.event_time),
         createdAt: String(row.created_at),
         location: { id: `db-${row.id}`, name: String(row.location_name), city: String(row.location_city ?? ""), country: String(row.location_country ?? ""), latitude: Number(row.latitude), longitude: Number(row.longitude) },
-        photos: ["./memories/south-bank-dinner.png"],
+        photos: signed?.map((photo) => photo.signedUrl).filter((url): url is string => Boolean(url)) ?? [],
         mood: String(row.mood ?? "😊"),
         moodLabel: String(row.mood_label ?? "A memory"),
         visibility: row.visibility === "Friends" ? "Friends" : "Only Me",
         tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
         people: Array.isArray(row.memory_people) ? row.memory_people.map((person: { display_name?: string }) => person.display_name).filter(Boolean) as string[] : [],
-        user: { id: user.id, name: user.name, initials: user.name.slice(0, 2).toUpperCase(), color: "#BCEFD8" },
-      }));
-      setMemories(mapped);
+        user: { id: String(row.owner_id), name: authorName, initials: authorName.slice(0, 2).toUpperCase(), color: "#BCEFD8" },
+      }; }));
+      if (active) setMemories(mapped);
     });
     return () => { active = false; };
   }, [user]);
 
-  const addMemory = useCallback((input: NewMemoryInput) => {
+  const addMemory = useCallback(async (input: NewMemoryInput) => {
+    if (supabase && !user) throw new Error("Sign in before saving a memory.");
     const location = input.location ?? locations.find((item) => item.id === input.locationId) ?? locations[0];
     const memory: Memory = {
       ...input,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       location,
-      photos: input.photos.length ? input.photos : ["./memories/south-bank-dinner.png"],
+      photos: input.photos,
       moodLabel: "A new memory",
       user: user ? { id: user.id, name: user.name, initials: user.name.slice(0, 2).toUpperCase(), color: "#BCEFD8" } : users[0],
     };
-    setMemories((current) => [memory, ...current]);
     if (supabase && user) {
-      void supabase.from("memories").insert({
+      const client = supabase;
+      const uploadedPaths: string[] = [];
+      const cleanup = async () => {
+        if (uploadedPaths.length) await client.storage.from("memory-photos").remove(uploadedPaths);
+      };
+      for (const file of input.photoFiles ?? []) {
+        const extension = file.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLowerCase() || "jpg";
+        const path = `${user.id}/${memory.id}/${crypto.randomUUID()}.${extension}`;
+        const { error } = await supabase.storage.from("memory-photos").upload(path, file, { contentType: file.type || "image/jpeg" });
+        if (error) { await cleanup(); throw error; }
+        uploadedPaths.push(path);
+      }
+      const { error } = await supabase.from("memories").insert({
         id: memory.id, owner_id: user.id, title: memory.title, content: memory.content,
         event_time: memory.eventTime, location_name: memory.location.name, location_city: memory.location.city,
         location_country: memory.location.country, latitude: memory.location.latitude, longitude: memory.location.longitude,
         mood: memory.mood, mood_label: memory.moodLabel, visibility: memory.visibility, tags: memory.tags,
-      }).then(async ({ error }) => {
-        if (error || !memory.people.length) return;
-        await supabase!.from("memory_people").insert(memory.people.map((displayName) => ({ memory_id: memory.id, display_name: displayName })));
       });
+      if (error) { await cleanup(); throw error; }
+      const [peopleResult, photosResult] = await Promise.all([
+        memory.people.length ? supabase.from("memory_people").insert(memory.people.map((displayName) => ({ memory_id: memory.id, display_name: displayName }))) : Promise.resolve({ error: null }),
+        uploadedPaths.length ? supabase.from("memory_photos").insert(uploadedPaths.map((storagePath, sortOrder) => ({ memory_id: memory.id, storage_path: storagePath, sort_order: sortOrder }))) : Promise.resolve({ error: null }),
+      ]);
+      if (peopleResult.error || photosResult.error) {
+        await supabase.from("memories").delete().eq("id", memory.id);
+        await cleanup();
+        throw peopleResult.error || photosResult.error;
+      }
+      if (uploadedPaths.length) {
+        const { data: signed } = await supabase.storage.from("memory-photos").createSignedUrls(uploadedPaths, 86400);
+        memory.photos = signed?.map((photo) => photo.signedUrl).filter((url): url is string => Boolean(url)) ?? [];
+      }
     }
+    setMemories((current) => [memory, ...current]);
     return memory;
   }, [user]);
 
@@ -125,12 +158,12 @@ export function MemoryProvider({ children }: { children: ReactNode }) {
         additionalProperties: false,
       },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
-      execute: (input) => {
+      execute: async (input) => {
         if (!input || typeof input !== "object") throw new Error("Memory details are required.");
         const data = input as Record<string, unknown>;
         if (typeof data.title !== "string" || !data.title.trim() || typeof data.content !== "string" || !data.content.trim()) throw new Error("Title and content are required.");
         if (typeof data.locationId !== "string" || !locations.some((item) => item.id === data.locationId)) throw new Error("Choose a valid Memory Map location.");
-        const memory = addMemory({
+        const memory = await addMemory({
           title: data.title.trim(),
           content: data.content.trim(),
           locationId: data.locationId,

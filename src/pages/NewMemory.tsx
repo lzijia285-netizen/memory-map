@@ -1,5 +1,5 @@
 import { Camera, Check, ChevronRight, Clock3, ImagePlus, MapPin, ShieldCheck, Tag, UsersRound, X } from "lucide-react";
-import { ChangeEvent, FormEvent, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/layout/PageHeader";
 import { useMemories } from "../context/MemoryContext";
@@ -28,33 +28,54 @@ export function NewMemory() {
   const [tags, setTags] = useState<string[]>(["Friends"]);
   const [visibility, setVisibility] = useState<Visibility>("Only Me");
   const [photos, setPhotos] = useState<string[]>([]);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [people, setPeople] = useState<string[]>([]);
   const [personInput, setPersonInput] = useState("");
 
   const addPhotos = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    setPhotos(files.slice(0, 6).map((file) => URL.createObjectURL(file)));
+    const files = Array.from(event.target.files ?? []).slice(0, 6);
+    if (files.some((file) => file.size > 10 * 1024 * 1024)) {
+      setError("Each photo must be smaller than 10 MB.");
+      return;
+    }
+    setError("");
+    setPhotoFiles(files);
+    setPhotos(files.map((file) => URL.createObjectURL(file)));
   };
-  const save = (event?: FormEvent) => {
+  useEffect(() => () => { photos.forEach((url) => URL.revokeObjectURL(url)); }, [photos]);
+
+  const save = async (event?: FormEvent) => {
     event?.preventDefault();
-    addMemory({
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await addMemory({
       title: title.trim() || "Untitled memory",
       content: content.trim() || "A small moment worth remembering.",
       eventTime: new Date(eventTime).toISOString(),
       locationId: locationId || "south-bank",
       location,
       photos,
+      photoFiles,
       mood,
       visibility,
       tags,
       people,
-    });
-    navigate("/home?saved=1");
+      });
+      navigate("/home?saved=1");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save this memory. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="page page--editor">
-      <PageHeader title="New memory" back action={<button className="text-button" type="button" onClick={() => save()}>Save</button>} />
+      <PageHeader title="New memory" back action={<button className="text-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button>} />
       <form className="memory-form" onSubmit={save}>
         <input ref={fileRef} className="sr-only" type="file" accept="image/*" multiple onChange={addPhotos} />
         <button type="button" className={`photo-drop ${photos.length ? "photo-drop--filled" : ""}`} onClick={() => fileRef.current?.click()}>
@@ -78,7 +99,8 @@ export function NewMemory() {
         <fieldset className="field-group"><legend><Tag size={16} /> Tags</legend><div className="tag-picker">{suggestedTags.map((tag) => <button type="button" key={tag} className={tags.includes(tag) ? "is-selected" : ""} onClick={() => setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])}>{tags.includes(tag) && <Check size={13} />}{tag}</button>)}</div></fieldset>
 
         <fieldset className="field-group"><legend><ShieldCheck size={16} /> Visibility</legend><div className="segmented-control"><button type="button" onClick={() => setVisibility("Only Me")} className={visibility === "Only Me" ? "is-selected" : ""}>Only me</button><button type="button" onClick={() => setVisibility("Friends")} className={visibility === "Friends" ? "is-selected" : ""}>Friends</button></div></fieldset>
-        <button className="primary-button editor-save" type="submit">Save memory <Check size={18} /></button>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button className="primary-button editor-save" type="submit" disabled={saving}>{saving ? "Saving…" : "Save memory"} <Check size={18} /></button>
       </form>
     </div>
   );

@@ -7,7 +7,7 @@ export function MemoryCard({ memory, featured = false }: { memory: Memory; featu
   return (
     <Link to={`/memory/${memory.id}`} className={`memory-card ${featured ? "memory-card--featured" : ""}`}>
       <div className="memory-card__image-wrap">
-        <img src={memory.photos[0]} alt="" className="memory-card__image" />
+        {memory.photos[0] ? <img src={memory.photos[0]} alt="" className="memory-card__image" /> : <div className="memory-card__placeholder"><MapPin size={36} /></div>}
         <span className="memory-card__mood" aria-label={memory.moodLabel}>{memory.mood}</span>
       </div>
       <div className="memory-card__body">

@@ -28,6 +28,13 @@ function toAppUser(user: SupabaseUser): AppUser {
   };
 }
 
+async function toMember(user: SupabaseUser): Promise<AppUser | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+  if (error) throw error;
+  return data ? { ...toAppUser(user), name: String(data.display_name) } : null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,13 +46,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    void supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user ? toAppUser(data.user) : null);
-      setLoading(false);
+    const client = supabase;
+    void client.auth.getUser().then(async ({ data }) => {
+      try {
+        const member = data.user ? await toMember(data.user) : null;
+        if (data.user && !member) await client.auth.signOut();
+        setUser(member);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     });
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ? toAppUser(session.user) : null);
-      setLoading(false);
+      if (!session) setUser(null);
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -58,7 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        if (data.user) setUser(toAppUser(data.user));
+        if (data.user) {
+          const member = await toMember(data.user);
+          if (!member) { await supabase.auth.signOut(); throw new Error("This account has not been invited to Memory Map."); }
+          setUser(member);
+        }
         return;
       }
       if (password.length < 8) throw new Error("Password must be at least 8 characters.");
@@ -76,7 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
         const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
-        if (data.user) setUser(toAppUser(data.user));
+        if (data.user) {
+          const member = await toMember(data.user);
+          if (!member) { await supabase.auth.signOut(); throw new Error("This account has not been invited to Memory Map."); }
+          setUser(member);
+        }
         return;
       }
       const demo = { id: "alex", email, name: name.trim() || email.split("@")[0] || "Alex" };
