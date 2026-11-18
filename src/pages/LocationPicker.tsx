@@ -20,7 +20,7 @@ export function LocationPicker() {
   const [results, setResults] = useState<Location[]>([]);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState("");
-  const mapLocations = useMemo(() => [selected, ...savedLocations.filter((item) => item.id !== selected.id)], [selected]);
+  const mapLocations = useMemo(() => [selected, ...savedLocations.filter((item) => item.id !== selected.id && (Math.abs(item.latitude - selected.latitude) > 0.00001 || Math.abs(item.longitude - selected.longitude) > 0.00001))], [selected]);
 
   const search = async (event: FormEvent) => {
     event.preventDefault();
