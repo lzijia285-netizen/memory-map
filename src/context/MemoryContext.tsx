@@ -21,6 +21,8 @@ interface NewMemoryInput {
 interface MemoryContextValue {
   memories: Memory[];
   addMemory: (input: NewMemoryInput) => Promise<Memory>;
+  updateMemory: (id: string, input: NewMemoryInput) => Promise<void>;
+  deleteMemory: (id: string) => Promise<void>;
 }
 
 const MemoryContext = createContext<MemoryContextValue | null>(null);
@@ -112,10 +114,56 @@ export function MemoryProvider({ children }: { children: ReactNode }) {
     return memory;
   }, [user]);
 
+  const updateMemory = useCallback(async (id: string, input: NewMemoryInput) => {
+    const original = memories.find((item) => item.id === id);
+    if (!original) throw new Error("This memory is unavailable.");
+    if (user && original.user.id !== user.id) throw new Error("Only the author can edit this memory.");
+    if (input.photoFiles?.length) throw new Error("Adding photos while editing is not available yet.");
+    const location = input.location ?? locations.find((item) => item.id === input.locationId) ?? original.location;
+    if (supabase) {
+      if (!user) throw new Error("Sign in before editing a memory.");
+      const { error } = await supabase.from("memories").update({
+        title: input.title, content: input.content, event_time: input.eventTime,
+        location_name: location.name, location_city: location.city, location_country: location.country,
+        latitude: location.latitude, longitude: location.longitude, mood: input.mood,
+        visibility: input.visibility, tags: input.tags, updated_at: new Date().toISOString(),
+      }).eq("id", id).eq("owner_id", user.id);
+      if (error) throw error;
+      const { error: peopleDeleteError } = await supabase.from("memory_people").delete().eq("memory_id", id);
+      if (peopleDeleteError) throw peopleDeleteError;
+      if (input.people.length) {
+        const { error: peopleInsertError } = await supabase.from("memory_people").insert(input.people.map((displayName) => ({ memory_id: id, display_name: displayName })));
+        if (peopleInsertError) throw peopleInsertError;
+      }
+    }
+    setMemories((current) => current.map((item) => item.id === id ? {
+      ...item, title: input.title, content: input.content, eventTime: input.eventTime,
+      location, mood: input.mood, visibility: input.visibility, tags: input.tags, people: input.people,
+    } : item));
+  }, [memories, user]);
+
+  const deleteMemory = useCallback(async (id: string) => {
+    const original = memories.find((item) => item.id === id);
+    if (!original) throw new Error("This memory is unavailable.");
+    if (user && original.user.id !== user.id) throw new Error("Only the author can delete this memory.");
+    if (supabase) {
+      if (!user) throw new Error("Sign in before deleting a memory.");
+      const { data: photos, error: photosError } = await supabase.from("memory_photos").select("storage_path").eq("memory_id", id);
+      if (photosError) throw photosError;
+      const { error } = await supabase.from("memories").delete().eq("id", id).eq("owner_id", user.id);
+      if (error) throw error;
+      const paths = photos?.map((photo) => String(photo.storage_path)) ?? [];
+      if (paths.length) await supabase.storage.from("memory-photos").remove(paths);
+    }
+    setMemories((current) => current.filter((item) => item.id !== id));
+  }, [memories, user]);
+
   const value = useMemo<MemoryContextValue>(() => ({
     memories,
     addMemory,
-  }), [addMemory, memories]);
+    updateMemory,
+    deleteMemory,
+  }), [addMemory, deleteMemory, memories, updateMemory]);
 
   useEffect(() => {
     const modelContext = document.modelContext;

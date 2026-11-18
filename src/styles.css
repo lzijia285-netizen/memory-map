@@ -211,6 +211,7 @@ button { cursor: pointer; }
 .map-sheet__list a { display: grid; grid-template-columns: 45px 1fr; align-items: center; gap: 10px; padding: 7px; border-radius: 13px; }
 .map-sheet__list a:hover { background: var(--mint-50); }
 .map-sheet__list img { width: 45px; height: 41px; border-radius: 11px; object-fit: cover; }
+.map-sheet__placeholder { display: grid; place-items: center; width: 45px; height: 41px; border-radius: 11px; color: var(--mint-700); background: var(--mint-50); }
 .map-sheet__list strong, .map-sheet__list small { display: block; }
 .map-sheet__list strong { font-size: .77rem; }
 .map-sheet__list small { margin-top: 3px; color: var(--muted); font-size: .65rem; }
@@ -341,6 +342,8 @@ button { cursor: pointer; }
 .detail-privacy strong { color: var(--ink); font-size: .75rem; }
 .detail-privacy small { margin-top: 3px; font-size: .62rem; }
 .detail-edit { margin-top: 20px; }
+.detail-delete { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; margin-top: 10px; padding: 11px; border: 0; background: none; color: #a54b4b; font: inherit; font-size: .75rem; cursor: pointer; }
+.detail-delete:disabled { opacity: .5; cursor: wait; }
 
 @media (min-width: 600px) {
   .page { padding: 42px 32px 64px; }

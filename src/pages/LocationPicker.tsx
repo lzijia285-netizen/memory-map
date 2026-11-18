@@ -1,6 +1,6 @@
 import { Crosshair, LoaderCircle, MapPin, Search } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/layout/PageHeader";
 import { MemoryMap } from "../components/map/MemoryMap";
 import { locations as savedLocations } from "../data/mockData";
@@ -10,8 +10,13 @@ const LOCATION_KEY = "memory-map-selected-location";
 
 export function LocationPicker() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("edit");
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Location>(savedLocations[0]);
+  const [selected, setSelected] = useState<Location>(() => {
+    try { return JSON.parse(sessionStorage.getItem(LOCATION_KEY) || "null") as Location || savedLocations[0]; }
+    catch { return savedLocations[0]; }
+  });
   const [results, setResults] = useState<Location[]>([]);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState("");
@@ -44,7 +49,7 @@ export function LocationPicker() {
   const chooseCoordinate = (longitude: number, latitude: number) => setSelected({ id: "custom-pin", name: "Pinned location", city: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`, country: "", latitude, longitude });
   const confirm = () => {
     sessionStorage.setItem(LOCATION_KEY, JSON.stringify(selected));
-    navigate(`/new?location=${encodeURIComponent(selected.id)}`);
+    navigate(`/new?${editId ? `edit=${encodeURIComponent(editId)}&` : ""}location=${encodeURIComponent(selected.id)}`);
   };
 
   return (

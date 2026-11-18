@@ -1,14 +1,26 @@
-import { ArrowLeft, CalendarDays, Edit3, LockKeyhole, MapPin, Share2, UsersRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, Edit3, LockKeyhole, MapPin, Share2, Trash2, UsersRound } from "lucide-react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMemories } from "../context/MemoryContext";
+import { useAuth } from "../context/AuthContext";
 
 export function MemoryDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { memories } = useMemories();
+  const { memories, deleteMemory } = useMemories();
+  const { user } = useAuth();
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
   const memory = memories.find((item) => item.id === id);
   if (!memory) return <div className="page"><p>This memory is unavailable.</p><Link to="/home">Back to home</Link></div>;
   const date = new Date(memory.eventTime);
+  const isOwner = user?.id === memory.user.id;
+  const remove = async () => {
+    if (!id || !window.confirm("Delete this memory permanently?")) return;
+    setDeleting(true); setError("");
+    try { await deleteMemory(id); navigate("/home"); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete this memory."); setDeleting(false); }
+  };
   return (
     <div className="detail-page">
       <div className="detail-hero">
@@ -24,7 +36,8 @@ export function MemoryDetail() {
         {memory.photos.length > 1 && <div className="detail-gallery">{memory.photos.slice(1).map((image, index) => <img src={image} alt={`${memory.title} ${index + 2}`} key={image} />)}</div>}
         <div className="detail-tags">{memory.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
         <div className="detail-privacy"><LockKeyhole size={17} /><span><strong>{memory.visibility}</strong><small>{memory.visibility === "Only Me" ? "Visible only to you" : "Shared with your close friends"}</small></span></div>
-        <Link className="primary-button detail-edit" to={`/new?edit=${memory.id}`}><Edit3 size={17} /> Edit memory</Link>
+        {isOwner && <><Link className="primary-button detail-edit" to={`/new?edit=${memory.id}`}><Edit3 size={17} /> Edit memory</Link><button className="detail-delete" type="button" disabled={deleting} onClick={() => void remove()}><Trash2 size={16} /> {deleting ? "Deleting…" : "Delete memory"}</button></>}
+        {error && <p className="form-error" role="alert">{error}</p>}
       </article>
     </div>
   );
